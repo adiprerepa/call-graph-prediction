@@ -1,7 +1,7 @@
 load("@proxy_wasm_cpp_sdk//bazel/wasm:wasm.bzl", "wasm_cc_binary")
 
 wasm_cc_binary(
-    name = "example.wasm",
+    name = "slate_plugin.wasm",
     srcs = [
         "plugin.cc",
         "plugin.h",
