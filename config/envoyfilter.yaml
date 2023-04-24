@@ -45,5 +45,5 @@ spec:
                 code:
                   remote:
                     http_uri:
-                      uri: https://storage.googleapis.com/istio-ecosystem/wasm-extensions/example/1.9.0.wasm
+                      uri: https://github.com/adiprerepa/self-optimizing-istio/blob/master/wasm-out/slate_plugin.wasm 
                 runtime: envoy.wasm.runtime.v8
