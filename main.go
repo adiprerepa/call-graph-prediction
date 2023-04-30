@@ -1,8 +1,6 @@
 package main
 
 import (
-	"time"
-
 	"github.com/tetratelabs/proxy-wasm-go-sdk/proxywasm"
 	"github.com/tetratelabs/proxy-wasm-go-sdk/proxywasm/types"
 )
@@ -41,18 +39,7 @@ type httpHeaders struct {
 	pluginContext *pluginContext
 }
 
-// Additional headers supposed to be injected to response headers.
-var additionalHeaders = map[string]string{
-	"who-am-i":    "aditya",
-}
-
 func (ctx *httpHeaders) OnHttpResponseHeaders(numHeaders int, endOfStream bool) types.Action {
-	for key, value := range additionalHeaders {
-		proxywasm.AddHttpResponseHeader(key, value)
-	}
-	return types.ActionContinue
-}
-
-func (ctx *httpHeaders) OnHttpRequestHeaders(int, bool) types.Action {
+	proxywasm.AddHttpResponseHeader("x-wasm", "true")
 	return types.ActionContinue
 }
