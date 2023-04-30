@@ -3,7 +3,6 @@
 static RegisterContextFactory register_Scaffold(
     CONTEXT_FACTORY(PluginContext), ROOT_FACTORY(PluginRootContext), "slate_root_id");
 
-bool PluginRootContext::onConfigure(size_t) { return true; }
 
 bool PluginRootContext::onStart(size_t) {
   LOG_TRACE("onStart");
@@ -40,7 +39,7 @@ FilterHeadersStatus PluginContext::onResponseHeaders(uint32_t, bool) {
   for (auto& p : pairs) {
     LOG_INFO(std::string(p.first) + std::string(" -> ") + std::string(p.second));
   }
-  addResponseHeader("X-Wasm-custom", "SLATE optimizer");
+  addResponseHeader("aditya-the-goat", "SLATE optimizer");
   return FilterHeadersStatus::Continue;
 }
 

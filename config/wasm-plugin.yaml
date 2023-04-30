@@ -1,0 +1,20 @@
+# apiVersion: extensions.istio.io/v1alpha1
+# kind: WasmPlugin
+# metadata:
+#   name: request-routing-plugin
+#   namespace: default
+# spec:
+#   selector:
+#     matchLabels:
+#       app: details
+#   url: https://storage.googleapis.com/istio-ecosystem/wasm-extensions/example/1.9.0.wasm
+apiVersion: extensions.istio.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: httpbin-rate-limiting
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: httpbin
+  url: oci://ghcr.io/adiprerepa/slate-plugin:latest 
