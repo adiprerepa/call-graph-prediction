@@ -51,7 +51,6 @@ func (ctx *httpHeaders) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 		proxywasm.LogCriticalf("error getting request headers: %v", err)
 	}
 	for _, header := range reqHeaders {
-		proxywasm.LogCriticalf("header: %v", header)
 		if header[0] == headerKey {
 			containsSessionHeader = true
 		}
@@ -64,22 +63,5 @@ func (ctx *httpHeaders) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 		proxywasm.LogCriticalf("header %v found, replacing with value: %s", headerKey, encoded)
 		proxywasm.ReplaceHttpRequestHeader(headerKey, encoded)
 	}
-	return types.ActionContinue
-}
-
-func (ctx *httpHeaders) OnHttpResponseHeaders(numHeaders int, endOfStream bool) types.Action {
-	proxywasm.LogCriticalf("OnHttpResponseHeaders %d", ctx.contextID)
-	// base64 encode the IP address on the next line and include it in the header
-	// ip := "10.244.0.56:80"
-	// headerKey := "x-slate-session-header"
-	// encoded := b64.URLEncoding.EncodeToString([]byte(ip))
-	// headers, err := proxywasm.GetHttpResponseHeader(headerKey)
-	// if err != nil || headers == "" {
-	// 	proxywasm.LogCriticalf("header %v not found, adding value %s", headerKey, encoded)
-	// 	proxywasm.AddHttpResponseHeader(headerKey, encoded)
-	// } else {
-	// 	proxywasm.LogCriticalf("header %v found, replacing it with value: %s", headerKey, encoded)
-	// 	proxywasm.AddHttpResponseHeader(headerKey, encoded)
-	// }
 	return types.ActionContinue
 }
