@@ -11,10 +11,10 @@
 apiVersion: extensions.istio.io/v1alpha1
 kind: WasmPlugin
 metadata:
-  name: httpbin-rate-limiting
+  name: slate-wasm-plugin
   namespace: default
 spec:
   selector:
     matchLabels:
-      app: httpbin
+      app: ratings
   url: oci://ghcr.io/adiprerepa/slate-plugin:latest 
