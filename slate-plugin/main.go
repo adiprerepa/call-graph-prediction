@@ -46,6 +46,10 @@ func (ctx *httpHeaders) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 	ip := "10.244.0.71:80"
 	headerKey := "x-slate-session-header"
 	containsSessionHeader := false
+	proxywasm.DispatchHttpCall("slate", make([][2]string, 0), nil, make([][2]string, 0), 5000, func(numHeaders int, bodySize int, numTrailers int) {
+		proxywasm.LogCriticalf("http call response received")
+	})
+
 	reqHeaders, err := proxywasm.GetHttpRequestHeaders()
 	if err != nil {
 		proxywasm.LogCriticalf("error getting request headers: %v", err)

@@ -1,5 +1,0 @@
-FROM envoyproxy/envoy:dev
-COPY ./envoy.yaml /etc/envoy.yaml
-COPY ./lib/envoy_filter_http_wasm_updated_example.wasm /lib/illinois_request_routing_extension.wasm
-RUN chmod go+r /etc/envoy.yaml /lib/illinois_request_routing_extension.wasm
-CMD ["/usr/local/bin/envoy", "-c", "/etc/envoy.yaml", "--service-cluster", "proxy"]
