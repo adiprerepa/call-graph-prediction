@@ -14,7 +14,7 @@ spec:
   ports:
   - name: http
     port: 8000
-    targetPort: 80
+    targetPort: 8080
   selector:
     app: slate-controller
 ---
@@ -36,8 +36,8 @@ spec:
     spec:
       serviceAccountName: slate-controller-sa
       containers:
-      - image: ghcr.io/adiprerepa/slate-controller # todo change
+      - image: ghcr.io/adiprerepa/slate-controller:latest # todo change
         imagePullPolicy: IfNotPresent
         name: slate-controller
         ports:
-        - containerPort: 80
+        - containerPort: 8080

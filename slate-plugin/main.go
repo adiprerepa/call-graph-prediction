@@ -42,30 +42,44 @@ type httpHeaders struct {
 }
 
 func (ctx *httpHeaders) OnHttpRequestHeaders(numHeaders int, endOfStream bool) types.Action {
-	proxywasm.LogCriticalf("OnHttpRequestHeaders %d", ctx.contextID)
-	ip := "10.244.0.71:80"
-	headerKey := "x-slate-session-header"
-	containsSessionHeader := false
-	proxywasm.DispatchHttpCall("slate", make([][2]string, 0), nil, make([][2]string, 0), 5000, func(numHeaders int, bodySize int, numTrailers int) {
-		proxywasm.LogCriticalf("http call response received")
+	proxywasm.LogCriticalf("OnHttpRequestHeaders %d", ctx.contextID)	
+	controllerHeaders := [][2]string {
+		{":method", "GET"},
+		{":authority", "slate-controller.default.svc.cluster.local"},
+		{":path", "/getEndpoint"},
+		{"content-type", "text/plain"},
+	}
+	proxywasm.LogCriticalf("making http call to slate-controller.default.svc.cluster.local")
+	proxywasm.DispatchHttpCall("outbound|8000||slate-controller.default.svc.cluster.local", controllerHeaders, nil, make([][2]string, 0), 5000, func(numHeaders int, bodySize int, numTrailers int) {
+		responseBody, err := proxywasm.GetHttpCallResponseBody(0, bodySize)
+		if err != nil {
+			proxywasm.LogCriticalf("error getting response body: %v", err)
+			return
+		}
+		proxywasm.LogCriticalf("http call response body: %s", string(responseBody))
+		ip := string(responseBody)
+
+		headerKey := "x-slate-session-header"
+		containsSessionHeader := false
+		outgoingRequestHeaders, err := proxywasm.GetHttpRequestHeaders()
+		if err != nil {
+			proxywasm.LogCriticalf("error getting request headers: %v", err)
+		}
+		for _, header := range outgoingRequestHeaders {
+			if header[0] == headerKey {
+				containsSessionHeader = true
+			}
+		}
+		encoded := b64.URLEncoding.EncodeToString([]byte(ip))
+		if !containsSessionHeader {
+			proxywasm.LogCriticalf("header %v not found, adding value %s", headerKey, encoded)
+			proxywasm.AddHttpRequestHeader(headerKey, encoded)
+		} else {
+			proxywasm.LogCriticalf("header %v found, replacing with value: %s", headerKey, encoded)
+			proxywasm.ReplaceHttpRequestHeader(headerKey, encoded)
+		}
 	})
 
-	reqHeaders, err := proxywasm.GetHttpRequestHeaders()
-	if err != nil {
-		proxywasm.LogCriticalf("error getting request headers: %v", err)
-	}
-	for _, header := range reqHeaders {
-		if header[0] == headerKey {
-			containsSessionHeader = true
-		}
-	}
-	encoded := b64.URLEncoding.EncodeToString([]byte(ip))
-	if !containsSessionHeader {
-		proxywasm.LogCriticalf("header %v not found, adding value %s", headerKey, encoded)
-		proxywasm.AddHttpRequestHeader(headerKey, encoded)
-	} else {
-		proxywasm.LogCriticalf("header %v found, replacing with value: %s", headerKey, encoded)
-		proxywasm.ReplaceHttpRequestHeader(headerKey, encoded)
-	}
+	
 	return types.ActionContinue
 }
