@@ -5,10 +5,11 @@ The following is an experiment to see if it is possible to optimize request rout
 ## Deploying
 
 ```bash
-kubectl apply -f config/slate-wasm-plugin.yaml
-kubectl apply -f config/slate-envoyfilter.yaml
+kubectl apply -f slate.yaml
 ```
 
 This will deploy a this WebAssembly plugin into the service mesh, and install the Stateful Session feature in Envoy.
 
-The actual plugin is located in the root directory `main.go`.
+It will also deploy the controller into the mesh.
+
+The actual plugin is located in the root directory `wasm-plugin/main.go`.

@@ -63,3 +63,44 @@ spec:
         name: slate-controller
         ports:
         - containerPort: 8080
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: example-filter
+spec:
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: ANY
+      listener:
+        filterChain:
+          filter:
+            name: envoy.http_connection_manager
+            subFilter:
+              name: envoy.filters.http.router
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.stateful_session
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.stateful_session.v3.StatefulSession
+          session_state:
+            name: envoy.http.stateful_session.header
+            typed_config:
+              "@type": type.googleapis.com/udpa.type.v1.TypedStruct
+              type_url: type.googleapis.com/envoy.extensions.http.stateful_session.header.v3.HeaderBasedSessionState
+              value:
+                name: x-slate-session-header
+---
+apiVersion: extensions.istio.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: slate-wasm-plugin
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: ratings
+  url: oci://ghcr.io/adiprerepa/slate-plugin:latest 
+---

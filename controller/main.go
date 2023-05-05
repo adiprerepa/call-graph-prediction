@@ -10,8 +10,6 @@ import (
 	"net/http"
 )
 
-var ip string
-
 func main() {
 	port := ":8080"
 	router := gin.Default()
