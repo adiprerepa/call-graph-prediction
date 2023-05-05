@@ -1,3 +1,8 @@
 bazel*
 wasm-out
 tmp.yaml
+controller/.idea/*
+slate-plugin/.idea/*
+
+controller/.idea
+slate-plugin/.idea
