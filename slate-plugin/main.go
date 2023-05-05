@@ -1,10 +1,9 @@
 package main
 
 import (
+	b64 "encoding/base64"
 	"github.com/tetratelabs/proxy-wasm-go-sdk/proxywasm"
 	"github.com/tetratelabs/proxy-wasm-go-sdk/proxywasm/types"
-
-	b64 "encoding/base64"
 )
 
 func main() {
@@ -41,24 +40,25 @@ type httpHeaders struct {
 	pluginContext *pluginContext
 }
 
+type ControllerResponse struct {
+	Endpoint string `json:"endpoint"`
+}
+
 func (ctx *httpHeaders) OnHttpRequestHeaders(numHeaders int, endOfStream bool) types.Action {
-	proxywasm.LogCriticalf("OnHttpRequestHeaders %d", ctx.contextID)	
-	controllerHeaders := [][2]string {
+	proxywasm.LogCriticalf("OnHttpRequestHeaders %d", ctx.contextID)
+	controllerHeaders := [][2]string{
 		{":method", "GET"},
 		{":authority", "slate-controller.default.svc.cluster.local"},
 		{":path", "/getEndpoint"},
-		{"content-type", "text/plain"},
+		{"content-type", "text/json"},
 	}
-	proxywasm.LogCriticalf("making http call to slate-controller.default.svc.cluster.local")
-	proxywasm.DispatchHttpCall("outbound|8000||slate-controller.default.svc.cluster.local", controllerHeaders, nil, make([][2]string, 0), 5000, func(numHeaders int, bodySize int, numTrailers int) {
+	cuid, err := proxywasm.DispatchHttpCall("outbound|8000||slate-controller.default.svc.cluster.local", controllerHeaders, nil, make([][2]string, 0), 5000, func(numHeaders int, bodySize int, numTrailers int) {
 		responseBody, err := proxywasm.GetHttpCallResponseBody(0, bodySize)
+		proxywasm.LogCriticalf("http call response body: %s", string(responseBody))
 		if err != nil {
 			proxywasm.LogCriticalf("error getting response body: %v", err)
 			return
 		}
-		proxywasm.LogCriticalf("http call response body: %s", string(responseBody))
-		ip := string(responseBody)
-
 		headerKey := "x-slate-session-header"
 		containsSessionHeader := false
 		outgoingRequestHeaders, err := proxywasm.GetHttpRequestHeaders()
@@ -70,7 +70,7 @@ func (ctx *httpHeaders) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 				containsSessionHeader = true
 			}
 		}
-		encoded := b64.URLEncoding.EncodeToString([]byte(ip))
+		encoded := b64.URLEncoding.EncodeToString(responseBody)
 		if !containsSessionHeader {
 			proxywasm.LogCriticalf("header %v not found, adding value %s", headerKey, encoded)
 			proxywasm.AddHttpRequestHeader(headerKey, encoded)
@@ -78,8 +78,14 @@ func (ctx *httpHeaders) OnHttpRequestHeaders(numHeaders int, endOfStream bool) t
 			proxywasm.LogCriticalf("header %v found, replacing with value: %s", headerKey, encoded)
 			proxywasm.ReplaceHttpRequestHeader(headerKey, encoded)
 		}
+		if err := proxywasm.ResumeHttpRequest(); err != nil {
+			proxywasm.LogCriticalf("error resuming http request: %v", err)
+		}
 	})
-
-	
-	return types.ActionContinue
+	if err != nil {
+		proxywasm.LogCriticalf("error dispatching http call: %v", err)
+	} else {
+		proxywasm.LogCriticalf("dispatched http call with id: %d", cuid)
+	}
+	return types.ActionPause
 }

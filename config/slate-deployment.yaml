@@ -3,6 +3,28 @@ kind: ServiceAccount
 metadata:
   name: slate-controller-sa
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: slate-controller-cr
+rules:
+- apiGroups: [""]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: slate-controller-crb
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: slate-controller-cr
+subjects:
+- kind: ServiceAccount
+  name: slate-controller-sa
+  namespace: default
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -37,7 +59,7 @@ spec:
       serviceAccountName: slate-controller-sa
       containers:
       - image: ghcr.io/adiprerepa/slate-controller:latest # todo change
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         name: slate-controller
         ports:
         - containerPort: 8080
