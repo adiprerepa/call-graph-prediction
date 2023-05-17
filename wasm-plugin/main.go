@@ -48,24 +48,17 @@ type httpHeaders struct {
 	bodyQueueId	uint32
 }
 
-func (ctx *httpHeaders) OnHttpRequestHeaders(numHeaders int, endOfStream bool) types.Action {
-	proxywasm.LogCriticalf("OnHttpRequestHeaders %d", ctx.contextID)
-	
-	return types.ActionContinue
-}
-
 func (ctx *httpHeaders) OnHttpRequestBody(bodySize int, endOfStream bool) types.Action {
 	proxywasm.LogCriticalf("OnHttpRequestBody %d", ctx.contextID)
 	body, err := proxywasm.GetHttpRequestBody(0, bodySize)
 	if err != nil {
 		proxywasm.LogCriticalf("error getting request body: %v", err)
 	} else {
-		proxywasm.LogCriticalf("request body: %s", string(body))
 		// commit body to shared queue
 		if err = proxywasm.EnqueueSharedQueue(ctx.bodyQueueId, body); err != nil {
 			proxywasm.LogCriticalf("error enqueuing body: %v", err)
 		} else {
-			proxywasm.LogCriticalf("enqueued body")
+			proxywasm.LogCriticalf("enqueued body of length %d", len(body))
 		}
 	}
 	return types.ActionContinue
@@ -99,18 +92,34 @@ func (ctx *httpHeaders) OnHttpStreamDone() {
 			proxywasm.LogCriticalf("error getting request header x-b3-traceid: %v", err)
 			return
 		}
-		// print traceId, headers, and body
-		proxywasm.LogCriticalf("traceId: %s", traceId)
-		proxywasm.LogCriticalf("headers: %v", headers)
-		proxywasm.LogCriticalf("body: %s", string(body))
+		/*
+		for content-type, we'll handle three types:
+		1. application/json
+		2. text/plain
+		3. grpc/proto
+		most microservice applications seem to use these kinds of content-types.
+		If we encounter a different content-type, we'll just assume it's text/plain.
+		for now, with grpc/proto, we'll just assume it's text/plain.
+		we'll embed application/json
+		*/
+		requestEncoding, err := proxywasm.GetHttpRequestHeader("content-type")
+		if err != nil {
+			proxywasm.LogCriticalf("error getting request header content-type: %v", err)
+			// we'll just assume the body is plain text
+			requestEncoding = "text/plain"
+		}
+		if requestEncoding != "application/json" {
+			// wrap with quotes
+			body = []byte(`"` + string(body) + `"`)
+		}
 		// send to controller
 		controllerHeaders := [][2]string{
 			{":method", "POST"},
 			{":authority", "slate-controller.default.svc.cluster.local"},
-			{":path", "/addTrace"},
+			{":path", "/traces"},
 			{"content-type", "text/json"},
 		}
-		controllerBody := []byte(`{"traceId":"` + traceId + `","headers":` + string(encodeHeaders(headers)) + `,"body":"` + string(body) + `"}`)
+		controllerBody := []byte(`{"traceId":"` + traceId + `","headers":` + string(encodeHeaders(headers)) + `,"body":` + string(body) + `}`)
 		// print controller body
 		proxywasm.LogCriticalf("controller body: %s", string(controllerBody))
 		cuid, err := proxywasm.DispatchHttpCall("outbound|8000||slate-controller.default.svc.cluster.local", controllerHeaders, controllerBody, make([][2]string, 0), 5000, func(numHeaders int, bodySize int, numTrailers int) {
@@ -121,24 +130,13 @@ func (ctx *httpHeaders) OnHttpStreamDone() {
 		} else {
 			proxywasm.LogCriticalf("dispatched http call: %d", cuid)
 		}
-	} else {
-		proxywasm.LogCriticalf("request not sampled")
 	}
 }
 
-func makeTraceKey(ctxId uint32) string {
-	return "trace-" + string(ctxId)
-}
-
-func makeHeaderKey(ctxId uint32) string {
-	return "header-" + string(ctxId)
-}
-
-func makeBodyKey(ctxId uint32) string {
-	return "body-" + string(ctxId)
-}
 
 // given a [][2]string of headers, json-encode them into a string without the json library
+// the json library crashes the proxy because it panics and webassembly doesn't have inbuilt error
+// handling (yet).
 func encodeHeaders(headers [][2]string) []byte {
 	var encoded string
 	encoded += "{"
