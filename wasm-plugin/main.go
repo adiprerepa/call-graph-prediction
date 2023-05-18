@@ -4,7 +4,20 @@ import (
 	// b64 "encoding/base64"
 	"github.com/tetratelabs/proxy-wasm-go-sdk/proxywasm"
 	"github.com/tetratelabs/proxy-wasm-go-sdk/proxywasm/types"
+	"encoding/json"
+	"os"
+	// "reflect"
 )
+
+// when there is a match with the MatchRule, the OverrideHost will be used
+type RouteMatchRules struct {
+	Rule []struct {
+		OverrideHost string `json:"overrideHost"`
+		Match struct {
+			Headers map[string]string `json:"headers"`
+		} `json:"match"`	
+	} `json:"rules"`
+}
 
 func main() {
 	proxywasm.SetVMContext(&vmContext{})
@@ -25,11 +38,21 @@ type pluginContext struct {
 	// Embed the default plugin context here,
 	// so that we don't need to reimplement all the methods.
 	types.DefaultPluginContext
+	RouteRules RouteMatchRules
+}
+
+func (p *pluginContext) OnPluginStart(pluginConfigurationSize int) types.OnPluginStartStatus {
+	proxywasm.LogCriticalf("OnPluginStart")
+	if err := proxywasm.SetTickPeriodMilliSeconds(5000); err != nil {
+		proxywasm.LogCriticalf("error setting tick period: %v", err)
+		return types.OnPluginStartStatusFailed
+	}
+	return types.OnPluginStartStatusOK
 }
 
 // Override types.DefaultPluginContext.
 func (p *pluginContext) NewHttpContext(contextID uint32) types.HttpContext {
-	httpContext := &httpHeaders{contextID: contextID, pluginContext: p}
+	httpContext := &httpContext{contextID: contextID, pluginContext: p}
 	queueId, err := proxywasm.RegisterSharedQueue("queue-" + string(contextID))
 	if err != nil {
 		proxywasm.LogCriticalf("error registering shared queue: %v", err)
@@ -39,16 +62,80 @@ func (p *pluginContext) NewHttpContext(contextID uint32) types.HttpContext {
 	return httpContext
 }
 
-type httpHeaders struct {
+func (p *pluginContext) OnTick() {
+	proxywasm.LogCriticalf("OnTick")
+	service := os.Getenv("HOSTNAME")
+	if service == "" {
+		service = "SLATE_UNKNOWN"
+	}
+	controllerHeaders := [][2]string{
+		{":method", "GET"},
+		{":authority", "slate-controller.default.svc.cluster.local"},
+		{":path", "/getRoutingRules"},
+		{"content-type", "text/json"},
+		{"x-slate-podname", service},
+	}
+	cuid, err := proxywasm.DispatchHttpCall("outbound|8000||slate-controller.default.svc.cluster.local", controllerHeaders, nil, make([][2]string, 0), 5000, func(numHeaders int, bodySize int, numTrailers int) {
+		responseBody, err := proxywasm.GetHttpCallResponseBody(0, bodySize)
+		proxywasm.LogCriticalf("http call response body: %s", string(responseBody))
+		if err != nil {
+			proxywasm.LogCriticalf("error getting response body: %v", err)
+			return
+		}
+		var routeMatchRules RouteMatchRules
+		err = json.Unmarshal(responseBody, &routeMatchRules)
+		if err != nil {
+			proxywasm.LogCriticalf("error unmarshalling response body: %v", err)
+			return
+		}
+		p.RouteRules = routeMatchRules
+	})
+	if err != nil {
+		proxywasm.LogCriticalf("error dispatching http call: %v", err)
+	} else {
+		proxywasm.LogCriticalf("dispatched http call with id: %d", cuid)
+	}
+}
+
+type httpContext struct {
 	// Embed the default http context here,
 	// so that we don't need to reimplement all the methods.
 	types.DefaultHttpContext
 	contextID     uint32
 	pluginContext *pluginContext
 	bodyQueueId	uint32
+	routeRules RouteMatchRules
 }
 
-func (ctx *httpHeaders) OnHttpRequestBody(bodySize int, endOfStream bool) types.Action {
+func (ctx *httpContext) OnHttpRequestHeaders(numHeaders int, endOfStream bool) types.Action {
+	proxywasm.LogCriticalf("OnHttpRequestHeaders %d", ctx.contextID)
+	// match rule O(1), set header
+	/*
+
+		headerKey := "x-slate-session-header"
+		containsSessionHeader := false
+		outgoingRequestHeaders, err := proxywasm.GetHttpRequestHeaders()
+		if err != nil {
+			proxywasm.LogCriticalf("error getting request headers: %v", err)
+		}
+		for _, header := range outgoingRequestHeaders {
+			if header[0] == headerKey {
+				containsSessionHeader = true
+			}
+		}
+		encoded := b64.URLEncoding.EncodeToString(responseBody)
+		if !containsSessionHeader {
+			proxywasm.LogCriticalf("header %v not found, adding value %s", headerKey, encoded)
+			proxywasm.AddHttpRequestHeader(headerKey, encoded)
+		} else {
+			proxywasm.LogCriticalf("header %v found, replacing with value: %s", headerKey, encoded)
+			proxywasm.ReplaceHttpRequestHeader(headerKey, encoded)
+		}
+	*/
+	return types.ActionContinue
+}
+
+func (ctx *httpContext) OnHttpRequestBody(bodySize int, endOfStream bool) types.Action {
 	proxywasm.LogCriticalf("OnHttpRequestBody %d", ctx.contextID)
 	body, err := proxywasm.GetHttpRequestBody(0, bodySize)
 	if err != nil {
@@ -64,7 +151,7 @@ func (ctx *httpHeaders) OnHttpRequestBody(bodySize int, endOfStream bool) types.
 	return types.ActionContinue
 }
 
-func (ctx *httpHeaders) OnHttpStreamDone() {
+func (ctx *httpContext) OnHttpStreamDone() {
 	proxywasm.LogCriticalf("OnHttpStreamDone %d", ctx.contextID)
 
 	hdr, err := proxywasm.GetHttpRequestHeader("x-b3-sampled")
@@ -113,11 +200,17 @@ func (ctx *httpHeaders) OnHttpStreamDone() {
 			body = []byte(`"` + string(body) + `"`)
 		}
 		// send to controller
+		// get service name
+		podName := os.Getenv("HOSTNAME")
+		if podName == "" {
+			podName = "SLATE_UNKNOWN"
+		}
 		controllerHeaders := [][2]string{
 			{":method", "POST"},
 			{":authority", "slate-controller.default.svc.cluster.local"},
 			{":path", "/traces"},
 			{"content-type", "text/json"},
+			{"x-slate-podname", podName},
 		}
 		controllerBody := []byte(`{"traceId":"` + traceId + `","headers":` + string(encodeHeaders(headers)) + `,"body":` + string(body) + `}`)
 		// print controller body
@@ -149,3 +242,4 @@ func encodeHeaders(headers [][2]string) []byte {
 	encoded += "}"
 	return []byte(encoded)
 }
+

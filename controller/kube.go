@@ -52,3 +52,11 @@ func (k *KubeController) GetTracingQueryEndpoint() (string, error) {
 	}
 	return svc.Spec.ClusterIP + ":16685", nil
 }
+
+func (k *KubeController) GetPodServiceName(podName string) (string, error) {
+	pod, err := k.clientset.CoreV1().Pods("default").Get(context.TODO(), podName, metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	return pod.Labels["app"], nil
+}

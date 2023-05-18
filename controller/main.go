@@ -9,13 +9,13 @@ import (
 	"github.com/jaegertracing/jaeger/proto-gen/api_v3"
 	"google.golang.org/grpc"
 	"io"
-	"net/http"
 	"time"
 )
 
 var (
 	controller *KubeController
-	requests   map[string]Request
+	// traceid -> service -> request
+	requests map[string]map[string]Request
 )
 
 type Request struct {
@@ -26,7 +26,7 @@ type Request struct {
 
 func init() {
 	controller = NewKubeController()
-	requests = make(map[string]Request)
+	requests = make(map[string]map[string]Request)
 }
 
 func main() {
@@ -101,39 +101,12 @@ func main() {
 	port := ":8080"
 	router := gin.Default()
 	fmt.Printf("Starting server at port %s", port)
-	router.GET("/getEndpoint", getEndpoint)
+	router.GET("/getRoutingRules", getRoutingRules)
 	router.GET("/traces", getTraces)
 	router.POST("/traces", addTrace)
 	if err := router.Run(port); err != nil {
 		panic(err)
 	}
-}
-
-func getEndpoint(c *gin.Context) {
-	// get endpoints for a given service
-	endpoints, err := controller.GetEndpoints("httpbin")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	selectedEndpoint := SelectEndpoint(endpoints)
-	c.String(http.StatusOK, selectedEndpoint)
-}
-
-func getTraces(c *gin.Context) {
-	// get traces from the requests map
-	c.JSON(http.StatusOK, requests)
-}
-
-func addTrace(c *gin.Context) {
-	// add a trace to the tracing service
-	var req Request
-	if err := c.BindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	requests[req.TraceID] = req
-	c.String(http.StatusOK, "trace added")
 }
 
 func SelectEndpoint(endpoints []string) string {
